@@ -34,9 +34,9 @@ contractDefinition
 
 /* sourceUnit:interfaceDefinition */
 customUnitDeclarations
-  : 'unit' ':' '{'
-    customUnitDeclaration
-    (',' customUnitDeclaration) *
+  : 'unit' ':' '{' 
+    customUnitDeclaration 
+    (',' customUnitDeclaration) * 
   '}'
   ;
 
@@ -51,11 +51,13 @@ interfaceDefinition
 
 /* sourceUnit:stateVariableDeclaration */
 stateVariableDeclaration
-  : Identifier ':' 'public('? type ')'? ;
+  : Identifier ':' 'public('? 
+      type 
+    ')'? 
+  ;
 
 type
-  : referenceType
-  | valueType
+  : '('?  valueType ('(' customUnitName ')')? | referenceType | mappingType ')'?
   ;
 
 // https://vyper.readthedocs.io/en/latest/types.html
@@ -71,37 +73,40 @@ valueType
   ;
 
 unitType
-  :  (  'timestamp' | 'timedelta' | 'wei_value' | customUnitType )  
+  :  (  'timestamp' | 'timedelta' | 'wei_value' | customUnitName )  
   ;
 
-customUnitType
-  // QUESTION: Should a grammer requre that the unit is defined above? 
+customUnitName
   : Identifier 
   ;
 
-
 referenceType
   : structType
-  | mappingType
   | listType
   | tupleType
   ;
-
 
 structType
   : '{' Identifier ':' valueType (',' Identifier ':' valueType)* '}'
   ;
 
+//  mappingType and mapKey are necessary to remove left recursion. 
 mappingType
-  : type '[' valueType ']' // mapping
+  : valueType '[' valueType ']' mapKey*
+  | referenceType '[' valueType ']'  mapKey*
   ;
+
+mapKey
+  : '[' valueType ']'
+  ;
+
 
 listType
   : valueType '[' IntegerNumber ']'
   ;
 
 tupleType
-  : '(' type (',' type)* ')'
+  : '(' valueType (',' valueType)* ')'
   ;
 
 
@@ -127,13 +132,20 @@ functionDefinition
   : Identifier ;
 
 
-/* Terminal Tokens */
-StringLiteral
-  : '"' DoubleQuotedStringCharacter* '"'
-  ;
+/* Lexer rules specify token definitions and more or less follow the syntax of parser rules except 
+that lexer rules cannot have arguments, return values, or local variables. Lexer rule names must 
+begin with an uppercase letter, which distinguishes them from parser rule names 
+*/
 
-DoubleQuotedStringCharacter
-  : ~["\r\n\\] | ('\\' .) ;
+
+
+/* Terminal Tokens */
+//StringLiteral
+//  : '"' DoubleQuotedStringCharacter* '"'
+//  ;
+//
+//DoubleQuotedStringCharacter
+//  : ~["\r\n\\] | ('\\' .) ;
 
 Identifier
   : IdentifierStart IdentifierPart* ;
@@ -153,11 +165,47 @@ IntegerNumber
 DecimalNumber
   : [0-9]+ ( '.' [0-9]* )? ( [eE] [0-9]+ )? ;
 
-/* Whitespace */
+
+
+/* Whitespace https://github.com/antlr/antlr4/blob/master/doc/lexer-rules.md */
+// A 'skip' command tells the lexer to get another token and throw out the current text.
+// channel(Hidden)
+// Characters and character constructs that are of no import
+// to the parser and are used to make the grammar easier to read
+// for humans.
+
+
 // This will need to be enhanced to handle pythonic indentation blocks.
 // good example: https://github.com/antlr/grammars-v4/blob/master/python2/Python2.g4#L376
 WS
-  : ([\t\r\n\u000C] | ' ' )+ -> skip ;
+//  : ([\t\r\n\u000C] | ' ' )+
+//    -> skip ;
+//    -> channel(HIDDEN) ;
+  : [ \t\r\n]+
+    -> skip;
+//    -> channel(HIDDEN) ;
+//WHITESPACE: ('\t' | ' ')+
+//{
+//if (self._tokenStartColumn == 0 and self._openBRCount == 0and not self._lineContinuation):
+//    la = self._input.LA(1)
+//    if la not in [ord('\r'), ord('\n'), ord('#'), -1]:
+//        self._suppressNewlines = False
+//        wsCount = 0
+//        for ch in self.text:
+//            if   ch == ' ' : wsCount += 1
+//            elif ch == '\t': wsCount += 8
+//        if wsCount > self._indents.wsval():
+//            self.emitIndent(len(self.text))
+//            self._indents.push(wsCount)
+//        else:
+//            while wsCount < self._indents.wsval():
+//                self.emitDedent()
+//                self._indents.pop()
+//            if wsCount != self._indents.wsval():
+//                raise Exception()
+//}  -> skip
+//    ;
+
 
 LINE_COMMENT
   : '#' ~[\r\n]* -> channel(HIDDEN) ;

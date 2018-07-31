@@ -14,6 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 grammar Vyper;
+import Python3;
 
 //https://github.com/ethereum/vyper/blob/54b8dc06f258eb0e1815ea222eb5f875aae443f2/vyper/parser/parser.py#L326
 
@@ -23,7 +24,7 @@ sourceUnit
 
 contractDefinition
   // vyper enforces the order of these sections. Although it's possible in vyper to have any empty file,
-  // antlr doesn't support it well. Thus we require atleast a functionDefinition
+  // antlr doesn't support it well. Thus we require at least a functionDefinition
   : customUnitDeclarations *
   interfaceDefinition *
   stateVariableDeclaration *
@@ -31,6 +32,10 @@ contractDefinition
   storageVarDefinition *
   functionDefinition +
   ;
+
+// Note: somewhere within here, we can put most of the Python3 grammar. Just need to add the restrictions on 
+// ordering... or is that really necessary to generate an AST? It's not the end of the world if the 
+// AST is valid, but the compiler rejects it. 
 
 /* sourceUnit:interfaceDefinition */
 customUnitDeclarations
@@ -51,13 +56,12 @@ interfaceDefinition
 
 /* sourceUnit:stateVariableDeclaration */
 stateVariableDeclaration
-  : Identifier ':' 'public('? 
-      type 
-    ')'? 
-  ;
+  : stmt;
 
 type
-  : '('?  valueType ('(' customUnitName ')')? | referenceType | mappingType ')'?
+  : '('?  valueType ('(' customUnitName ')')? 
+  | referenceType 
+  | mappingType ')'?
   ;
 
 // https://vyper.readthedocs.io/en/latest/types.html
@@ -91,6 +95,7 @@ structType
   ;
 
 //  mappingType and mapKey are necessary to remove left recursion. 
+// TODO: simplify by combining these two rules
 mappingType
   : valueType '[' valueType ']' mapKey*
   | referenceType '[' valueType ']'  mapKey*
@@ -140,12 +145,12 @@ begin with an uppercase letter, which distinguishes them from parser rule names
 
 
 /* Terminal Tokens */
-//StringLiteral
-//  : '"' DoubleQuotedStringCharacter* '"'
-//  ;
-//
-//DoubleQuotedStringCharacter
-//  : ~["\r\n\\] | ('\\' .) ;
+StringLiteral
+  : '"' DoubleQuotedStringCharacter* '"'
+  ;
+
+DoubleQuotedStringCharacter
+  : ~["\r\n\\] | ('\\' .) ;
 
 Identifier
   : IdentifierStart IdentifierPart* ;
@@ -165,46 +170,17 @@ IntegerNumber
 DecimalNumber
   : [0-9]+ ( '.' [0-9]* )? ( [eE] [0-9]+ )? ;
 
-
-
 /* Whitespace https://github.com/antlr/antlr4/blob/master/doc/lexer-rules.md */
 // A 'skip' command tells the lexer to get another token and throw out the current text.
 // channel(Hidden)
 // Characters and character constructs that are of no import
 // to the parser and are used to make the grammar easier to read
 // for humans.
-
-
 // This will need to be enhanced to handle pythonic indentation blocks.
 // good example: https://github.com/antlr/grammars-v4/blob/master/python2/Python2.g4#L376
 WS
-//  : ([\t\r\n\u000C] | ' ' )+
-//    -> skip ;
-//    -> channel(HIDDEN) ;
   : [ \t\r\n]+
     -> skip;
-//    -> channel(HIDDEN) ;
-//WHITESPACE: ('\t' | ' ')+
-//{
-//if (self._tokenStartColumn == 0 and self._openBRCount == 0and not self._lineContinuation):
-//    la = self._input.LA(1)
-//    if la not in [ord('\r'), ord('\n'), ord('#'), -1]:
-//        self._suppressNewlines = False
-//        wsCount = 0
-//        for ch in self.text:
-//            if   ch == ' ' : wsCount += 1
-//            elif ch == '\t': wsCount += 8
-//        if wsCount > self._indents.wsval():
-//            self.emitIndent(len(self.text))
-//            self._indents.push(wsCount)
-//        else:
-//            while wsCount < self._indents.wsval():
-//                self.emitDedent()
-//                self._indents.pop()
-//            if wsCount != self._indents.wsval():
-//                raise Exception()
-//}  -> skip
-//    ;
 
 
 LINE_COMMENT

@@ -233,15 +233,14 @@ functionDefinition
  * Python3 parser rules
  */
 
-single_input: NEWLINE | simple_stmt | compound_stmt NEWLINE;
-file_input: (NEWLINE | stmt)* EOF;
-eval_input: testlist NEWLINE* EOF;
+// single_input: NEWLINE | simple_stmt | compound_stmt NEWLINE;
+// file_input: (NEWLINE | stmt)* EOF;
+// eval_input: testlist NEWLINE* EOF;
 
 decorator: '@' dotted_name ( '(' (arglist)? ')' )? NEWLINE;
 decorators: decorator+;
-decorated: decorators (classdef | funcdef | async_funcdef);
+decorated: decorators (classdef | funcdef);
 
-async_funcdef: ASYNC funcdef;
 funcdef: 'def' NAME parameters ('->' test)? ':' suite;
 
 parameters: '(' (typedargslist)? ')';
@@ -250,7 +249,7 @@ typedargslist: (tfpdef ('=' test)? (',' tfpdef ('=' test)?)* (',' (
       | '**' tfpdef (',')?)?)?
   | '*' (tfpdef)? (',' tfpdef ('=' test)?)* (',' ('**' tfpdef (',')?)?)?
   | '**' tfpdef (',')?);
-tfpdef: NAME (':' test)?;
+tfpdef: NAME (':' type)?;
 varargslist: (vfpdef ('=' test)? (',' vfpdef ('=' test)?)* (',' (
         '*' (vfpdef)? (',' vfpdef ('=' test)?)* (',' ('**' vfpdef (',')?)?)?
       | '**' vfpdef (',')?)?)?
@@ -263,8 +262,8 @@ stmt: simple_stmt | compound_stmt;
 simple_stmt: small_stmt (';' small_stmt)* (';')? NEWLINE;
 small_stmt: (expr_stmt | del_stmt | pass_stmt | flow_stmt |
              import_stmt | global_stmt | nonlocal_stmt | assert_stmt);
-expr_stmt: testlist_star_expr (annassign | augassign (yield_expr|testlist) |
-                     ('=' (yield_expr|testlist_star_expr))*);
+expr_stmt: testlist_star_expr (annassign | augassign testlist |
+                     ('=' testlist_star_expr)*);
 annassign: ':' test ('=' test)?;
 testlist_star_expr: (test|star_expr) (',' (test|star_expr))* (',')?;
 augassign: ('+=' | '-=' | '*=' | '@=' | '/=' | '%=' | '&=' | '|=' | '^=' |
@@ -272,11 +271,10 @@ augassign: ('+=' | '-=' | '*=' | '@=' | '/=' | '%=' | '&=' | '|=' | '^=' |
 // For normal and annotated assignments, additional restrictions enforced by the interpreter
 del_stmt: 'del' exprlist;
 pass_stmt: 'pass';
-flow_stmt: break_stmt | continue_stmt | return_stmt | raise_stmt | yield_stmt;
+flow_stmt: break_stmt | continue_stmt | return_stmt | raise_stmt;
 break_stmt: 'break';
 continue_stmt: 'continue';
 return_stmt: 'return' (testlist)?;
-yield_stmt: yield_expr;
 raise_stmt: 'raise' (test ('from' test)?)?;
 import_stmt: import_name | import_from;
 import_name: 'import' dotted_as_names;
@@ -292,8 +290,7 @@ global_stmt: 'global' NAME (',' NAME)*;
 nonlocal_stmt: 'nonlocal' NAME (',' NAME)*;
 assert_stmt: 'assert' test (',' test)?;
 
-compound_stmt: if_stmt | while_stmt | for_stmt | try_stmt | with_stmt | funcdef | classdef | decorated | async_stmt;
-async_stmt: ASYNC (funcdef | with_stmt | for_stmt);
+compound_stmt: if_stmt | while_stmt | for_stmt | try_stmt | with_stmt | funcdef | classdef | decorated;
 if_stmt: 'if' test ':' suite ('elif' test ':' suite)* ('else' ':' suite)?;
 while_stmt: 'while' test ':' suite ('else' ':' suite)?;
 for_stmt: 'for' exprlist 'in' testlist ':' suite ('else' ':' suite)?;
@@ -328,11 +325,15 @@ arith_expr: term (('+'|'-') term)*;
 term: factor (('*'|'@'|'/'|'%'|'//') factor)*;
 factor: ('+'|'-'|'~') factor | power;
 power: atom_expr ('**' factor)?;
-atom_expr: (AWAIT)? atom trailer*;
-atom: ('(' (yield_expr|testlist_comp)? ')' |
+atom_expr: atom trailer* | evm_data ; 
+atom: ('(' (testlist_comp)? ')' |
        '[' (testlist_comp)? ']' |
        '{' (dictorsetmaker)? '}' |
        NAME | NUMBER | STRING+ | '...' | 'None' | 'True' | 'False');
+evm_data : ( block_info | msg_info | tx_info) ;
+block_info: BLOCK '.' ( BLOCK_NUM | TIMESTAMP | PREV_HASH );
+msg_info: MSG '.' ( SENDER | VALUE | GAS );
+tx_info: TX '.' ORIGIN;
 testlist_comp: (test|star_expr) ( comp_for | (',' (test|star_expr))* (',')? );
 trailer: '(' (arglist)? ')' | '[' subscriptlist ']' | '.' NAME;
 subscriptlist: subscript (',' subscript)* (',')?;
@@ -364,14 +365,12 @@ argument: ( test (comp_for)? |
             '*' test );
 
 comp_iter: comp_for | comp_if;
-comp_for: (ASYNC)? 'for' exprlist 'in' or_test (comp_iter)?;
+comp_for: 'for' exprlist 'in' or_test (comp_iter)?;
 comp_if: 'if' test_nocond (comp_iter)?;
 
 // not used in grammar, but may appear in "node" passed from Parser to Compiler
 encoding_decl: NAME;
 
-yield_expr: 'yield' (yield_arg)?;
-yield_arg: 'from' test | testlist;
 
 /*
  * lexer rules
@@ -394,6 +393,25 @@ INTEGER
  | HEX_INTEGER
  | BIN_INTEGER
  ;
+
+/// EVM data
+MSG: 'msg';
+SENDER: 'sender';
+VALUE: 'value';
+GAS: 'gas';
+
+TX: 'tx' ;
+ORIGIN: 'origin' ;
+
+BLOCK: 'block';
+BLOCK_NUM: 'number';
+PREV_HASH: 'prevhash';
+TIMESTAMP: 'timestamp';
+
+
+
+
+
 
 DEF : 'def';
 RETURN : 'return';
@@ -423,13 +441,10 @@ NONE : 'None';
 TRUE : 'True';
 FALSE : 'False';
 CLASS : 'class';
-YIELD : 'yield';
 DEL : 'del';
 PASS : 'pass';
 CONTINUE : 'continue';
 BREAK : 'break';
-ASYNC : 'async';
-AWAIT : 'await';
 
 NEWLINE
  : ( {atStartOfInput()}?   SPACES

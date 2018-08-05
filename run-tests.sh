@@ -43,6 +43,9 @@ echo "Test file: $TEST_FILE"
 if [ -n "$TEST_FILE" ]; then
   echo -e "${BLUE}Grammar: $GRAMMAR; Start Rule: $START_RULE; Test file: $TEST_FILE${NC}"
   java -classpath "$ANTLR_JAR":target/ org.antlr.v4.gui.TestRig "$GRAMMAR" "$START_RULE" < $TEST_FILE 2>&1 #|
+elif [ $TEST_FILE == "stdin" ]; then
+  echo -e "${BLUE}Grammar: $GRAMMAR; Type your input, then ^D"
+  java -classpath "$ANTLR_JAR":target/ org.antlr.v4.gui.TestRig "$GRAMMAR" "$START_RULE" < $TEST_FILE 2>&1 #|
 else
   # Try parsing each file in samples/
   echo -e "${BLUE}Grammar: $GRAMMAR; Start Rule: $START_RULE; ${NC}"

@@ -1,26 +1,42 @@
-// Copyright 2016-2017 Federico Bond <federicobond@gmail.com>
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
+/*
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2014 by Bart Kiers
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * Project      : python3-parser; an ANTLR4 grammar for Python 3
+ *                https://github.com/bkiers/python3-parser
+ * Developed by : Bart Kiers, bart@big-o.nl
+ */
 grammar Vyper;
 
-/// Insert Python3 grammar tokens and @lexer actions
+// All comments that start with "///" are copy-pasted from
+// The Python Language Reference
 
 tokens { INDENT, DEDENT }
 
 @lexer::members {
-// A queue where extra tokens are pushed on (see the NEWLINE lexer rule).
+  // A queue where extra tokens are pushed on (see the NEWLINE lexer rule).
   private java.util.LinkedList<Token> tokens = new java.util.LinkedList<>();
   // The stack that keeps track of the indentation level.
   private java.util.Stack<Integer> indents = new java.util.Stack<>();
@@ -108,7 +124,6 @@ tokens { INDENT, DEDENT }
     return super.getCharPositionInLine() == 0 && super.getLine() == 1;
   }
 }
-
 
 // each file is a contract, even an empty file. But antlr does not support emptiness very well.
 sourceUnit
@@ -230,17 +245,18 @@ functionDefinition
   ;
 
 /*
- * Python3 parser rules
+ * parser rules
  */
 
-// single_input: NEWLINE | simple_stmt | compound_stmt NEWLINE;
-// file_input: (NEWLINE | stmt)* EOF;
-// eval_input: testlist NEWLINE* EOF;
+single_input: NEWLINE | simple_stmt | compound_stmt NEWLINE;
+file_input: (NEWLINE | stmt)* EOF;
+eval_input: testlist NEWLINE* EOF;
 
 decorator: '@' dotted_name ( '(' (arglist)? ')' )? NEWLINE;
 decorators: decorator+;
-decorated: decorators (classdef | funcdef);
+decorated: decorators (classdef | funcdef | async_funcdef);
 
+async_funcdef: ASYNC funcdef;
 funcdef: 'def' NAME parameters ('->' test)? ':' suite;
 
 parameters: '(' (typedargslist)? ')';
@@ -262,19 +278,20 @@ stmt: simple_stmt | compound_stmt;
 simple_stmt: small_stmt (';' small_stmt)* (';')? NEWLINE;
 small_stmt: (expr_stmt | del_stmt | pass_stmt | flow_stmt |
              import_stmt | global_stmt | nonlocal_stmt | assert_stmt);
-expr_stmt: testlist_star_expr (annassign | augassign testlist |
-                     ('=' testlist_star_expr)*);
-annassign: ':' test ('=' test)?;
+expr_stmt: testlist_star_expr (annassign | augassign (yield_expr|testlist) |
+                     ('=' (yield_expr|testlist_star_expr))*);
+annassign: ':' type ('=' test)?;
 testlist_star_expr: (test|star_expr) (',' (test|star_expr))* (',')?;
 augassign: ('+=' | '-=' | '*=' | '@=' | '/=' | '%=' | '&=' | '|=' | '^=' |
             '<<=' | '>>=' | '**=' | '//=');
 // For normal and annotated assignments, additional restrictions enforced by the interpreter
 del_stmt: 'del' exprlist;
 pass_stmt: 'pass';
-flow_stmt: break_stmt | continue_stmt | return_stmt | raise_stmt;
+flow_stmt: break_stmt | continue_stmt | return_stmt | raise_stmt | yield_stmt;
 break_stmt: 'break';
 continue_stmt: 'continue';
 return_stmt: 'return' (testlist)?;
+yield_stmt: yield_expr;
 raise_stmt: 'raise' (test ('from' test)?)?;
 import_stmt: import_name | import_from;
 import_name: 'import' dotted_as_names;
@@ -290,7 +307,8 @@ global_stmt: 'global' NAME (',' NAME)*;
 nonlocal_stmt: 'nonlocal' NAME (',' NAME)*;
 assert_stmt: 'assert' test (',' test)?;
 
-compound_stmt: if_stmt | while_stmt | for_stmt | try_stmt | with_stmt | funcdef | classdef | decorated;
+compound_stmt: if_stmt | while_stmt | for_stmt | try_stmt | with_stmt | funcdef | classdef | decorated | async_stmt;
+async_stmt: ASYNC (funcdef | with_stmt | for_stmt);
 if_stmt: 'if' test ':' suite ('elif' test ':' suite)* ('else' ':' suite)?;
 while_stmt: 'while' test ':' suite ('else' ':' suite)?;
 for_stmt: 'for' exprlist 'in' testlist ':' suite ('else' ':' suite)?;
@@ -365,12 +383,14 @@ argument: ( test (comp_for)? |
             '*' test );
 
 comp_iter: comp_for | comp_if;
-comp_for: 'for' exprlist 'in' or_test (comp_iter)?;
+comp_for: (ASYNC)? 'for' exprlist 'in' or_test (comp_iter)?;
 comp_if: 'if' test_nocond (comp_iter)?;
 
 // not used in grammar, but may appear in "node" passed from Parser to Compiler
 encoding_decl: NAME;
 
+yield_expr: 'yield' (yield_arg)?;
+yield_arg: 'from' test | testlist;
 
 /*
  * lexer rules
@@ -394,6 +414,7 @@ INTEGER
  | BIN_INTEGER
  ;
 
+
 /// EVM data
 MSG: 'msg';
 SENDER: 'sender';
@@ -407,11 +428,6 @@ BLOCK: 'block';
 BLOCK_NUM: 'number';
 PREV_HASH: 'prevhash';
 TIMESTAMP: 'timestamp';
-
-
-
-
-
 
 DEF : 'def';
 RETURN : 'return';
@@ -441,10 +457,13 @@ NONE : 'None';
 TRUE : 'True';
 FALSE : 'False';
 CLASS : 'class';
+YIELD : 'yield';
 DEL : 'del';
 PASS : 'pass';
 CONTINUE : 'continue';
 BREAK : 'break';
+ASYNC : 'async';
+AWAIT : 'await';
 
 NEWLINE
  : ( {atStartOfInput()}?   SPACES

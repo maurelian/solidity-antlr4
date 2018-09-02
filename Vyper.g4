@@ -125,124 +125,6 @@ tokens { INDENT, DEDENT }
   }
 }
 
-// each file is a contract, even an empty file. But antlr does not support emptiness very well.
-sourceUnit
-  : ( contractDefinition ) EOF ;
-
-contractDefinition
-  // vyper enforces the order of these sections. Although it's possible in vyper to have any empty file,
-  // antlr doesn't support it well. Thus we require at least a functionDefinition
-  : customUnitDeclarations *
-  interfaceDefinition *
-  stateVariableDeclaration *
-  eventDefinition *
-  functionDefinition +
-  ;
-
-// Note: somewhere within here, we can put most of the Python3 grammar. Just need to add the restrictions on 
-// ordering... or is that really necessary to generate an AST? It's not the end of the world if the 
-// AST is valid, but the compiler rejects it. 
-
-/* sourceUnit:interfaceDefinition */
-customUnitDeclarations
-  : 'unit' ':' '{' 
-    customUnitDeclaration 
-    (',' customUnitDeclaration) * 
-  '}'
-  ;
-
-customUnitDeclaration
-  : NAME ':' STRING_LITERAL
-  ;
-
-/* sourceUnit:interfaceDefinition */
-interfaceDefinition
-  : NAME ;
-
-
-/* sourceUnit:stateVariableDeclaration */
-stateVariableDeclaration
-  : NAME ':' 'public('? 
-      type 
-    ')'? 
-  ;
-
-type
-  : '('?  
-    valueType ( '(' customUnitName ')' )? 
-    | referenceType 
-    | mappingType 
-  ')'?
-  ;
-
-// https://vyper.readthedocs.io/en/latest/types.html
-valueType
-  : 'bool' 
-  | 'int128' 
-  | 'uint256' 
-  | 'decimal' 
-  | 'address' 
-  | unitType 
-  | 'bytes32' 
-  | 'bytes[' DECIMAL_INTEGER ']'
-  ;
-
-unitType
-  :  (  'timestamp' | 'timedelta' | 'wei_value' | customUnitName )  
-  ;
-
-customUnitName
-  : NAME 
-  ;
-
-referenceType
-  : structType
-  | listType
-  | tupleType
-  ;
-
-structType
-  : '{' NAME ':' valueType (',' NAME ':' valueType)* '}'
-  ;
-
-//  mappingType and mapKey are necessary to remove left recursion. 
-// TODO: simplify by combining these two rules
-mappingType
-  : valueType '[' valueType ']' mapKey*
-  | referenceType '[' valueType ']'  mapKey*
-  ;
-
-mapKey
-  : '[' valueType ']'
-  ;
-
-
-listType
-  : valueType '[' DECIMAL_INTEGER ']'
-  ;
-
-tupleType
-  : '(' valueType (',' valueType)* ')'
-  ;
-
-
-/* sourceUnit:eventDefinition */
-eventDefinition
-  : NAME ':' 'event' eventParameterList
-  ;
-
-eventParameterList
-  : '(' '{' eventParameter (',' eventParameter)* '}' ')'
-  ;
-
-eventParameter
-  : NAME ':' ('indexed(' valueType ')' ) | valueType
-  ;
-
-/* sourceUnit:functionDefinition */
-functionDefinition
-  : decorated
-  ;
 
 /*
  * parser rules
@@ -251,6 +133,45 @@ functionDefinition
 single_input: NEWLINE | simple_stmt | compound_stmt NEWLINE;
 file_input: (NEWLINE | stmt)* EOF;
 eval_input: testlist NEWLINE* EOF;
+
+//contractDefinition
+//  // vyper enforces the order of these sections. Although it's possible in vyper to have any empty file,
+//  // antlr doesn't support it well. Thus we require at least a functionDefinition
+//  : (NEWLINE | customUnitDeclarations ) *
+//    (NEWLINE | interfaceDefinition) *
+//    (NEWLINE | stateVariableDeclaration) *
+//    (NEWLINE | eventDefinition) *
+//    (NEWLINE | functionDefinition) +
+//  ;
+
+customUnitDeclarations: 'unit' ':' '{' customUnitDeclaration (',' customUnitDeclaration) * '}';
+customUnitDeclaration: NAME ':' STRING_LITERAL ;
+interfaceDefinition: NAME ; // incomplete
+stateVariableDeclaration: NAME ':' 'public('? type ')'? ;
+
+type: '('?  valueType | referenceType  | mappingType ')'?;
+
+// https://vyper.readthedocs.io/en/latest/types.html
+valueType: ( 'bool' | 'int128' | 'uint256' | 'decimal' | 'address' | unitType | 'bytes32'| 'bytes[' DECIMAL_INTEGER ']' )  ( '(' unitType ')' )? ;
+unitType: NAME ;
+
+referenceType: structType | listType | tupleType ;
+
+structType: '{' NAME ':' valueType (',' NAME ':' valueType)* '}';
+mappingType: valueType '[' valueType ']'+ | referenceType '[' valueType ']'+ ;
+
+listType: valueType '[' DECIMAL_INTEGER ']' ;
+
+tupleType: '(' valueType (',' valueType)* ')' ;
+
+
+/* sourceUnit:eventDefinition */
+eventDefinition: NAME ':' 'event' eventParameterList ;
+
+eventParameterList: '(' '{' eventParameter (',' eventParameter)* '}' ')' ;
+
+eventParameter: NAME ':' ('indexed(' valueType ')' ) | valueType ; // vyper
+
 
 decorator: '@' dotted_name ( '(' (arglist)? ')' )? NEWLINE;
 decorators: decorator+;
@@ -343,15 +264,11 @@ arith_expr: term (('+'|'-') term)*;
 term: factor (('*'|'@'|'/'|'%'|'//') factor)*;
 factor: ('+'|'-'|'~') factor | power;
 power: atom_expr ('**' factor)?;
-atom_expr: atom trailer* | evm_data ; 
+atom_expr: atom trailer* ; 
 atom: ('(' (testlist_comp)? ')' |
        '[' (testlist_comp)? ']' |
        '{' (dictorsetmaker)? '}' |
        NAME | NUMBER | STRING+ | '...' | 'None' | 'True' | 'False');
-evm_data : ( block_info | msg_info | tx_info) ;
-block_info: BLOCK '.' ( BLOCK_NUM | TIMESTAMP | PREV_HASH );
-msg_info: MSG '.' ( SENDER | VALUE | GAS );
-tx_info: TX '.' ORIGIN;
 testlist_comp: (test|star_expr) ( comp_for | (',' (test|star_expr))* (',')? );
 trailer: '(' (arglist)? ')' | '[' subscriptlist ']' | '.' NAME;
 subscriptlist: subscript (',' subscript)* (',')?;
@@ -415,19 +332,8 @@ INTEGER
  ;
 
 
-/// EVM data
-MSG: 'msg';
-SENDER: 'sender';
-VALUE: 'value';
-GAS: 'gas';
+//BLOCK_MEMBER: 'block.' NAME; // disambiguate `timestamp` unit from `block.timestamp`
 
-TX: 'tx' ;
-ORIGIN: 'origin' ;
-
-BLOCK: 'block';
-BLOCK_NUM: 'number';
-PREV_HASH: 'prevhash';
-TIMESTAMP: 'timestamp';
 
 DEF : 'def';
 RETURN : 'return';
